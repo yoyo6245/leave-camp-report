@@ -26,7 +26,7 @@ var mon = dt.getMonth() + 1;
 var day = dt.getDate();
 var hr = dt.getHours();
 var min = dt.getMinutes();
-var date = mon + '/' + day;
+var date = mon + '/' + day ;
 var time = hr*100 + min;
 
 // 時間存在 excel (1, 14)
@@ -53,8 +53,9 @@ function doPost(e) {
     var SpreadSheet = SpreadsheetApp.openById(sheet_id);
     var Sheet = SpreadSheet.getSheetByName(list_name);
     
-    // 更改list_name
+    // 更改list_name & 檢查當下使用哪張表格
     list_name = check_list_name(Sheet);
+    //send_msg(CHANNEL_ACCESS_TOKEN, replyToken, 'list_name: ' + list_name);
     Sheet = SpreadSheet.getSheetByName(list_name);
     
     // 特殊指令的處理
@@ -95,7 +96,7 @@ function doPost(e) {
       // 指令
       case '班長專用指令': 
         send_msg(CHANNEL_ACCESS_TOKEN, replyToken, 
-                 '新增\n xxxx(時間)\n功用:新增一個安全回報時段的表格\n注意要分行\nex:\n新增\n1600\n\n回報 xx(班別)\n功用:查看該班回報狀況\nex:\n回報 12\n\n回報 全部\n功用:查看全部班級回報狀況\n\n誰沒回報\n功用:查看未回報人員\n\n/excel\n功用:查看excel網址');
+                 '新增今日表格\n功用:新增今天兩個安全回報時段的表格\n\n回報 xx(班別)\n功用:查看該班回報狀況\nex:\n回報 12\n\n回報 全部\n功用:查看全部班級回報狀況\n\n誰沒回報\n功用:查看未回報人員\n\n/excel\n功用:查看excel網址');
         
       // 列出當前回報情況
        
@@ -221,6 +222,13 @@ function doPost(e) {
       case '未回報':
         send_msg(CHANNEL_ACCESS_TOKEN, replyToken, print_non_report_list(Sheet));
         return;
+        
+      case '名單初始化' :
+        list_name = '工作表1';
+        Sheet = SpreadSheet.getSheetByName(list_name);
+        
+        
+        
 
       default:
         console.log('not special command')
@@ -257,18 +265,47 @@ function doPost(e) {
       list_name = '工作表1';
       Sheet = SpreadSheet.getSheetByName(list_name);
       
-      Sheet.getRange(1, 14).setValue(request_time); 
-      list_name = date + ' ' + request_time + "安全回報";
+      Sheet.getRange(1, 14).setValue(date + ' ' + request_time); 
+      list_name = Sheet.getRange(1, 14).getValue() + "安全回報";
       ss.insertSheet(list_name);
       Sheet = SpreadSheet.getSheetByName(list_name);
-      Sheet.getRange(1, 14).setValue(request_time);
+      Sheet.getRange(1, 14).setValue(date + ' ' + request_time);
       send_msg(CHANNEL_ACCESS_TOKEN, replyToken, "已新增表格 " + list_name);
+      return ;
+    }
+    
+    //新增今日表格
+    if(msg_split[0] == "新增今日表格" || msg_split[0] == "新增本日表格" || msg_split[0] == "新增今天表格")
+    {
+      request_time = msg_split[1];
+      var ss = SpreadsheetApp.openById(sheet_id);
+      list_name = '工作表1';
+      Sheet = SpreadSheet.getSheetByName(list_name);
+      //將工作表1的(1, 14)標註為當天日期(最後新增表格日期)
+      Sheet.getRange(1, 14).setValue(date + ' - '); 
+      //新增1100表格
+      list_name = date + " - 1100安全回報";
+      ss.insertSheet(list_name);
+      Sheet = SpreadSheet.getSheetByName(list_name);
+      Sheet.getRange(1, 14).setValue(date + ' - 1100');
+      //新增1900表格
+      list_name = date + " - 1900安全回報";
+      ss.insertSheet(list_name);
+      Sheet = SpreadSheet.getSheetByName(list_name);
+      Sheet.getRange(1, 14).setValue(date + ' - 1900');
+      send_msg(CHANNEL_ACCESS_TOKEN, replyToken, "已新增今日1100及1900安全回報表格");
       return ;
     }
     
     // 從回報內容中取得回報的號碼
     num = parseInt(msg_info, 10);
-    
+    var at_home = '在家';
+    var at_home2 = '到家';
+    var outdoor = '出門';
+    if(msg_info.includes(outdoor) == true)
+      Sheet.getRange(mem_class[num] % 100, parseInt(mem_class[num] / 100, 10)).setBackground("red");
+    if(msg_info.includes(at_home) == true || msg_info.includes(at_home2) == true)
+      Sheet.getRange(mem_class[num] % 100, parseInt(mem_class[num] / 100, 10)).setBackground(null);
     Sheet.getRange(mem_class[num] % 100, parseInt(mem_class[num] / 100, 10)).setValue(msg_info);
     Sheet.getRange(16, parseInt(mem_class[num] / 100, 10)).setValue( print_report_list(Sheet, parseInt(mem_class[num] / 100, 10)) );
     send_msg(CHANNEL_ACCESS_TOKEN, replyToken, "回報成功");
@@ -282,11 +319,17 @@ function doPost(e) {
 
 function check_list_name(Sheet){
   if (Sheet.getRange(1, 14).getValue() == '' )
-    list_name = '工作表1';
+    list_name = '工作表1';/*
   else if (Sheet.getRange(1, 14).getValue() == '專車回報' )
-    list_name = date + ' ' +'專車回報';
-  else
-    list_name = date + ' ' + Sheet.getRange(1, 14).getValue() + "安全回報";
+    list_name = date + ' ' +'專車回報';*/
+  else if (hr < 11 && hr >= 5)    // 05:00 ~ 11:00 使用1100表格
+    list_name = Sheet.getRange(1, 14).getValue() + "1100安全回報";
+    //send_msg(CHANNEL_ACCESS_TOKEN, replyToken, "用1100");
+  else if (hr >= 11 || hr < 5)    // 11:00 ~ 隔天 05:00 使用1100表格
+    list_name = Sheet.getRange(1, 14).getValue() + "1900安全回報";
+    //send_msg(CHANNEL_ACCESS_TOKEN, replyToken, "用1900");
+  else 
+    list_name = Sheet.getRange(1, 14).getValue() + "安全回報";
   return list_name;
 }
 
@@ -304,7 +347,7 @@ function print_report_list(Sheet, class_num) {
 
 function print_non_report_list(Sheet) {
   
-  report = time + '尚未回報名單\n';
+  report = '尚未回報名單\n';
   for(i = 1; i <= total_mem; i++){
     if (Sheet.getRange(parseInt(mem_class[i] % 100, 10), parseInt(mem_class[i] / 100, 10)).getValue() == '' )
       report = report + i + '\r\n';
